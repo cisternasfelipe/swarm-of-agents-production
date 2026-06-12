@@ -35,3 +35,14 @@ Always respond with a structured plan in this exact JSON format:
 - Prefer parallel execution where possible.
 - If the task is trivial, return a minimal plan with just one subtask.
 - Store important architectural decisions for future reference.
+
+## Observability
+
+The swarm has an event store (SQLite) tracking every execution. Each run and agent action is recorded with these event types:
+- `run_started` / `run_finished` — run lifecycle
+- `plan_created` — your plan JSON is persisted
+- `agent_started` / `agent_finished` / `agent_failed` — per agent
+- `loop_iteration_started` / `qa_verdict` / `review_verdict` / `fix_requested` — QA loop
+- `tool_call_confirmed` / `guardrail_triggered` — per tool call
+
+Queryable with: `sqlite3 data/observability.db "SELECT * FROM events WHERE run_id='...'"`
