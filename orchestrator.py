@@ -1,11 +1,13 @@
 import asyncio
 import json
+import uuid
 from typing import Optional
 
 from agents import create_agent
-from config import MAX_LOOP_ITERATIONS
+from config import MAX_LOOP_ITERATIONS, OBSERVABILITY_DB_PATH
 from utils.logger import get_logger
 from utils.metrics import Metrics
+from observability.store import EventStore
 
 logger = get_logger("orchestrator")
 metrics = Metrics()
@@ -24,24 +26,30 @@ class Orchestrator:
         self.project_path = project_path
         self.read_only = read_only
         self._active_tasks = {}
+        self._event_store = EventStore(OBSERVABILITY_DB_PATH)
 
     async def run_team_task(self, task: str) -> TaskResult:
-        logger.info("team_task_start", task=task[:100])
+        run_id = str(uuid.uuid4())
+        self._event_store.create_run(run_id, "team", task, self.project_path)
+        self._event_store.emit(run_id, "run_started", summary=task[:500])
+        logger.info("team_task_start", run_id=run_id, task=task[:100])
         try:
-            architect = create_agent("architect", self.project_path, read_only=True)
+            architect = create_agent("architect", self.project_path, read_only=True,
+                                     run_id=run_id, event_store=self._event_store)
             plan_result = await architect.run(
                 f"Analyze this task and create an execution plan:\n\n{task}"
             )
             plan = self._parse_plan(plan_result)
+            self._event_store.emit(run_id, "plan_created", agent="architect", payload=plan)
             if not plan or not plan.get("subtasks"):
-                return TaskResult("success", plan_result, "architect")
+                return await self._finish_run(run_id, "success", TaskResult("success", plan_result, "architect"))
 
             results = {}
             for group in plan.get("parallel_groups", []):
                 group_tasks = [
                     st for st in plan["subtasks"] if st["agent"] in group
                 ]
-                group_results = await self._run_parallel(group_tasks)
+                group_results = await self._run_parallel(group_tasks, run_id)
                 results.update(group_results)
 
             remaining = [
@@ -49,7 +57,7 @@ class Orchestrator:
                 if st["agent"] not in [a for g in plan.get("parallel_groups", []) for a in g]
             ]
             for subtask in remaining:
-                result = await self._run_single(subtask)
+                result = await self._run_single(subtask, run_id)
                 results[subtask["agent"]] = result
 
             qa_needed = any(st["agent"] == "qa_tester" for st in plan["subtasks"])
@@ -57,39 +65,53 @@ class Orchestrator:
 
             if qa_needed or review_needed:
                 for iteration in range(MAX_LOOP_ITERATIONS):
+                    self._event_store.emit(run_id, "loop_iteration_started", iteration=iteration + 1)
                     logger.info("loop_iteration", iteration=iteration + 1)
                     if qa_needed and "qa_tester" not in results:
-                        qa_agent = create_agent("qa_tester", self.project_path, read_only=self.read_only)
+                        qa_agent = create_agent("qa_tester", self.project_path,
+                                                read_only=self.read_only,
+                                                run_id=run_id, event_store=self._event_store)
                         qa_result = await qa_agent.run(
                             f"Test the implementation for this task:\n\n{task}\n\n"
                             f"Results so far:\n{self._summarize_results(results)}"
                         )
                         results["qa_tester"] = qa_result
-                        if "FAIL" in qa_result or "NEEDS_FIX" in qa_result:
+                        verdict = "FAIL" if ("FAIL" in qa_result or "NEEDS_FIX" in qa_result) else "PASS"
+                        self._event_store.emit(run_id, "qa_verdict", agent="qa_tester",
+                                               iteration=iteration + 1, payload={"verdict": verdict})
+                        if verdict == "FAIL":
                             dev_tasks = [st for st in plan["subtasks"] if "dev" in st["agent"]]
                             for dt in dev_tasks:
+                                self._event_store.emit(run_id, "fix_requested", agent=dt["agent"],
+                                                       iteration=iteration + 1)
                                 fix_result = await self._run_single({
                                     "agent": dt["agent"],
                                     "task": f"Fix issues found by QA:\n{qa_result}\n\nOriginal task: {dt['task']}"
-                                })
+                                }, run_id)
                                 results[dt["agent"]] = fix_result
                             results.pop("qa_tester", None)
                             continue
 
                     if review_needed and "code_reviewer" not in results:
-                        reviewer = create_agent("code_reviewer", self.project_path, read_only=True)
+                        reviewer = create_agent("code_reviewer", self.project_path, read_only=True,
+                                                run_id=run_id, event_store=self._event_store)
                         review_result = await reviewer.run(
                             f"Review the code changes for this task:\n\n{task}\n\n"
                             f"Results so far:\n{self._summarize_results(results)}"
                         )
                         results["code_reviewer"] = review_result
-                        if "REQUEST_CHANGES" in review_result:
+                        verdict = "REQUEST_CHANGES" if "REQUEST_CHANGES" in review_result else "APPROVE"
+                        self._event_store.emit(run_id, "review_verdict", agent="code_reviewer",
+                                               iteration=iteration + 1, payload={"verdict": verdict})
+                        if verdict == "REQUEST_CHANGES":
                             dev_tasks = [st for st in plan["subtasks"] if "dev" in st["agent"]]
                             for dt in dev_tasks:
+                                self._event_store.emit(run_id, "fix_requested", agent=dt["agent"],
+                                                       iteration=iteration + 1)
                                 fix_result = await self._run_single({
                                     "agent": dt["agent"],
                                     "task": f"Address review comments:\n{review_result}\n\nOriginal task: {dt['task']}"
-                                })
+                                }, run_id)
                                 results[dt["agent"]] = fix_result
                             results.pop("code_reviewer", None)
                             continue
@@ -98,28 +120,43 @@ class Orchestrator:
             final_output = self._compile_results(task, plan, results)
             metrics.record_task(success=True)
             logger.info("team_task_done", status="success")
-            return TaskResult("success", final_output, "orchestrator", results)
+            return await self._finish_run(run_id, "success",
+                                         TaskResult("success", final_output, "orchestrator", results))
 
         except Exception as e:
             metrics.record_task(success=False)
             logger.error("team_task_failed", error=str(e))
-            return TaskResult("error", f"Task failed: {str(e)}", "orchestrator")
+            return await self._finish_run(run_id, "error",
+                                         TaskResult("error", f"Task failed: {str(e)}", "orchestrator"))
+
+    async def _finish_run(self, run_id: str, status: str, result: TaskResult) -> TaskResult:
+        self._event_store.emit(run_id, "run_finished",
+                               summary=f"{status}: {result.output[:400]}" if len(result.output) > 400
+                               else f"{status}: {result.output}")
+        self._event_store.finish_run(run_id, status)
+        return result
 
     async def delegate_task(self, task: str, role: str) -> TaskResult:
-        logger.info("delegate_start", role=role, task=task[:100])
+        run_id = str(uuid.uuid4())
+        self._event_store.create_run(run_id, "delegate", task, self.project_path)
+        self._event_store.emit(run_id, "run_started", summary=task[:500])
+        logger.info("delegate_start", run_id=run_id, role=role, task=task[:100])
         try:
-            agent = create_agent(role, self.project_path, read_only=self.read_only)
+            agent = create_agent(role, self.project_path, read_only=self.read_only,
+                                run_id=run_id, event_store=self._event_store)
             result = await agent.run(task)
             logger.info("delegate_done", role=role)
-            return TaskResult("success", result, role)
+            return await self._finish_run(run_id, "success",
+                                         TaskResult("success", result, role))
         except Exception as e:
             logger.error("delegate_failed", role=role, error=str(e))
-            return TaskResult("error", f"Agent {role} failed: {str(e)}", role)
+            return await self._finish_run(run_id, "error",
+                                         TaskResult("error", f"Agent {role} failed: {str(e)}", role))
 
-    async def _run_parallel(self, subtasks: list[dict]) -> dict[str, str]:
+    async def _run_parallel(self, subtasks: list[dict], run_id: str) -> dict[str, str]:
         tasks = []
         for st in subtasks:
-            tasks.append(self._run_single(st))
+            tasks.append(self._run_single(st, run_id))
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
         results = {}
         for st, res in zip(subtasks, results_list):
@@ -129,8 +166,9 @@ class Orchestrator:
                 results[st["agent"]] = res
         return results
 
-    async def _run_single(self, subtask: dict) -> str:
-        agent = create_agent(subtask["agent"], self.project_path, read_only=self.read_only)
+    async def _run_single(self, subtask: dict, run_id: str) -> str:
+        agent = create_agent(subtask["agent"], self.project_path, read_only=self.read_only,
+                            run_id=run_id, event_store=self._event_store)
         return await agent.run(subtask["task"])
 
     def _parse_plan(self, plan_text: str) -> Optional[dict]:

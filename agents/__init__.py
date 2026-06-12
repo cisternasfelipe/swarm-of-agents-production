@@ -16,8 +16,10 @@ AGENT_REGISTRY: dict[str, type[BaseAgent]] = {
 }
 
 
-def create_agent(role: str, project_path: str, read_only: bool = False) -> BaseAgent:
+def create_agent(role: str, project_path: str, read_only: bool = False,
+                 run_id: str | None = None, event_store=None) -> BaseAgent:
     cls = AGENT_REGISTRY.get(role)
     if cls is None:
         raise ValueError(f"Unknown agent role: {role}")
-    return cls(project_path=project_path, read_only=read_only)
+    return cls(project_path=project_path, read_only=read_only,
+               run_id=run_id, event_store=event_store)
