@@ -121,3 +121,6 @@ SKILLS_BY_ROLE = {
     "backend_dev": ["backend-node"],
 }
 SKILLS_GLOBAL = ["Guia tecnica Latex"]
+
+OBSERVABILITY_DB_PATH = BASE_DIR / "data" / "observability.db"
+OBSERVABILITY_ENABLED = True

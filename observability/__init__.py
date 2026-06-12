@@ -1,0 +1,15 @@
+EVENT_TYPES = [
+    "run_started",
+    "run_finished",
+    "plan_created",
+    "agent_started",
+    "agent_finished",
+    "agent_failed",
+    "loop_iteration_started",
+    "qa_verdict",
+    "review_verdict",
+    "fix_requested",
+    "tool_call_confirmed",
+    "tool_call_blocked",
+    "guardrail_triggered",
+]

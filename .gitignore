@@ -4,5 +4,6 @@ __pycache__/
 *.pyc
 *.pyo
 data/chroma_db/
+data/observability.db
 logs/
 *.log
