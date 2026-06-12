@@ -124,3 +124,6 @@ SKILLS_GLOBAL = ["Guia tecnica Latex"]
 
 OBSERVABILITY_DB_PATH = BASE_DIR / "data" / "observability.db"
 OBSERVABILITY_ENABLED = True
+OBSERVABILITY_API_HOST = os.environ.get("OBS_API_HOST", "127.0.0.1")
+OBSERVABILITY_API_PORT = int(os.environ.get("OBS_API_PORT", "8080"))
+OBSERVABILITY_CORS_ORIGIN = os.environ.get("OBS_CORS_ORIGIN", "http://localhost:5173")
