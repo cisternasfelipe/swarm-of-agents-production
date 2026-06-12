@@ -1,0 +1,249 @@
+% ============================================================================
+%  PLANTILLA — GUÍA TÉCNICA EDUCATIVA PARA ASIGNATURAS DE CÓDIGO
+%  Salida: PDF vía pdflatex (compilar dos veces para fijar referencias/índice)
+%
+%  Cómo usar esta plantilla:
+%   1. NO edites el preámbulo salvo metadatos y el lenguaje de \lstset.
+%   2. Reemplaza el contenido entre marcas << ... >> con el material real.
+%   3. Cada bloque está comentado con su función pedagógica.
+%   4. Compila:  pdflatex plantilla-guia.tex  (x2)
+% ============================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% ---- Idioma y codificación --------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noquoting]{babel}
+
+% ---- Layout, tipografía, color ---------------------------------------------
+\usepackage[a4paper,margin=2.5cm,headheight=14pt]{geometry}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[colorlinks=true,linkcolor=azulGuia,urlcolor=azulGuia,citecolor=azulGuia]{hyperref}
+
+% ---- Paleta -----------------------------------------------------------------
+\definecolor{azulGuia}{HTML}{1F4E79}
+\definecolor{grisCodigo}{HTML}{F5F5F5}
+\definecolor{verdeComentario}{HTML}{2E7D32}
+\definecolor{moradoKeyword}{HTML}{6A1B9A}
+\definecolor{rojoString}{HTML}{C62828}
+\definecolor{ambar}{HTML}{B45309}
+
+% ---- Cajas (objetivos, definición, ejercicio, etc.) ------------------------
+\usepackage[most]{tcolorbox}
+
+\newtcolorbox{objetivos}{colback=azulGuia!6,colframe=azulGuia,
+  fonttitle=\bfseries,title=Objetivos de aprendizaje,arc=2mm,boxrule=0.6pt}
+\newtcolorbox{definicion}[1]{colback=white,colframe=azulGuia,
+  fonttitle=\bfseries,title=Definición: #1,arc=2mm,boxrule=0.6pt}
+\newtcolorbox{nota}{colback=verdeComentario!8,colframe=verdeComentario,
+  fonttitle=\bfseries,title=Nota,arc=2mm,boxrule=0.6pt}
+\newtcolorbox{advertencia}{colback=ambar!10,colframe=ambar,
+  fonttitle=\bfseries,title=Cuidado,arc=2mm,boxrule=0.6pt}
+\newtcolorbox{ejemplo}[1]{colback=grisCodigo,colframe=azulGuia!70,
+  fonttitle=\bfseries,title=Ejemplo resuelto: #1,arc=2mm,boxrule=0.6pt}
+
+% Contador y caja para ejercicios numerados automáticamente
+\newcounter{ejcontador}
+\newtcolorbox{ejercicio}[1][]{colback=white,colframe=azulGuia!55,
+  fonttitle=\bfseries,arc=2mm,boxrule=0.6pt,
+  title={Ejercicio \stepcounter{ejcontador}\theejcontador\ifx\relax#1\relax\else\ (#1)\fi}}
+
+% ---- Resaltado de código (listings) ----------------------------------------
+% Cambia "language=Python" por C, C++, Java, SQL, etc. para otra asignatura.
+\usepackage{listings}
+\lstset{
+  language=Python,
+  backgroundcolor=\color{grisCodigo},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{moradoKeyword}\bfseries,
+  commentstyle=\color{verdeComentario}\itshape,
+  stringstyle=\color{rojoString},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{gray!40},
+  xleftmargin=14pt,
+  tabsize=4,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+           {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1
+           {Ú}{{\'U}}1 {Ñ}{{\~N}}1
+}
+
+% ---- Encabezado y pie -------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small\color{azulGuia}<<NOMBRE DE LA ASIGNATURA>>}
+\rhead{\small\color{azulGuia}<<TEMA>>}
+\cfoot{\small Página \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---- Estilo de títulos ------------------------------------------------------
+\titleformat{\section}{\Large\bfseries\color{azulGuia}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{azulGuia!85}}{\thesubsection}{1em}{}
+
+% ============================================================================
+%  METADATOS DE PORTADA
+% ============================================================================
+\title{\vspace{-1cm}\color{azulGuia}\textbf{<<TÍTULO DE LA GUÍA>>}\\[2mm]
+  \large\normalcolor <<NOMBRE DE LA ASIGNATURA>> --- Unidad <<N>>}
+\author{<<Docente / Institución>>}
+\date{<<Semestre / Fecha>>}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+% ============================================================================
+%  1. OBJETIVOS  — qué sabrá hacer el estudiante al terminar (verbos medibles)
+% ============================================================================
+\begin{objetivos}
+Al finalizar esta guía, el estudiante será capaz de:
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Explicar qué es la recursividad y distinguir caso base de caso recursivo.
+  \item Trazar la pila de llamadas de una función recursiva paso a paso.
+  \item Implementar soluciones recursivas correctas en Python.
+  \item Reconocer cuándo la recursión es preferible a la iteración y viceversa.
+\end{itemize}
+\end{objetivos}
+
+% ============================================================================
+%  PRERREQUISITOS  — qué debe saber el estudiante de antemano
+% ============================================================================
+\section*{Conocimientos previos}
+Antes de comenzar, debes manejar: definición de funciones en Python,
+parámetros y valores de retorno, condicionales (\texttt{if/else}) y el concepto
+de variable local.
+
+% ============================================================================
+%  2. DESARROLLO CONCEPTUAL  — teoría progresiva, de lo simple a lo complejo
+% ============================================================================
+\section{¿Qué es la recursividad?}
+
+Una función \textbf{recursiva} es aquella que se llama a sí misma para resolver
+una versión más pequeña del mismo problema. La idea descansa en dos piezas que
+deben coexistir siempre.
+
+\begin{definicion}{recursividad}
+Técnica en la que la solución de un problema se expresa en términos de
+soluciones de instancias más pequeñas del mismo problema, hasta alcanzar un
+\emph{caso base} que se resuelve directamente.
+\end{definicion}
+
+\subsection{Las dos piezas obligatorias}
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{Caso base:} la condición de parada. Sin él, la función se llama
+        infinitamente y agota la pila.
+  \item \textbf{Caso recursivo:} la llamada a sí misma con una entrada
+        estrictamente más cercana al caso base.
+\end{enumerate}
+
+\begin{advertencia}
+Si el caso recursivo no \emph{avanza} hacia el caso base (por ejemplo, llamar
+con el mismo argumento), obtendrás un \texttt{RecursionError} en Python.
+\end{advertencia}
+
+\subsection{Cómo razona la máquina: la pila de llamadas}
+
+Cada llamada pendiente se apila; cuando un caso base retorna, la pila se
+desapila resolviendo cada nivel. Comprender este apilamiento es la clave para
+depurar recursión.
+
+% ============================================================================
+%  3. EJEMPLOS RESUELTOS  — código real + explicación línea a línea
+% ============================================================================
+\section{Ejemplos resueltos}
+
+\begin{ejemplo}{factorial de un número}
+El factorial $n! = n \times (n-1) \times \cdots \times 1$, con $0! = 1$.
+\end{ejemplo}
+
+\begin{lstlisting}
+def factorial(n):
+    # Caso base: el factorial de 0 es 1
+    if n == 0:
+        return 1
+    # Caso recursivo: n * factorial de (n-1)
+    return n * factorial(n - 1)
+
+print(factorial(4))  # -> 24
+\end{lstlisting}
+
+\noindent\textbf{Traza de \texttt{factorial(4)}:}
+\[
+4 \cdot \underbrace{3 \cdot \underbrace{2 \cdot \underbrace{1 \cdot \underbrace{1}_{n=0}}_{n=1}}_{n=2}}_{n=3} = 24
+\]
+
+\begin{nota}
+Observa que cada llamada reduce \texttt{n} en uno: así se garantiza que el
+caso base ($n=0$) siempre se alcanza para entradas no negativas.
+\end{nota}
+
+% ============================================================================
+%  4. EJERCICIOS  — graduados de menor a mayor dificultad
+% ============================================================================
+\section{Ejercicios propuestos}
+
+\begin{ejercicio}[básico]
+Escribe una función recursiva \texttt{suma\_hasta(n)} que devuelva
+$1 + 2 + \cdots + n$. Identifica explícitamente el caso base.
+\end{ejercicio}
+
+\begin{ejercicio}[intermedio]
+Implementa \texttt{potencia(base, exp)} de forma recursiva, sin usar el
+operador \texttt{**}. Asume \texttt{exp} entero no negativo.
+\end{ejercicio}
+
+\begin{ejercicio}[desafío]
+La sucesión de Fibonacci se define $F(0)=0$, $F(1)=1$,
+$F(n)=F(n-1)+F(n-2)$. Impleméntala recursivamente y luego responde:
+¿por qué esta versión es ineficiente para $n$ grande? Justifica en términos
+del número de llamadas.
+\end{ejercicio}
+
+% ============================================================================
+%  5. SOLUCIONES  — al final para no revelarlas antes de tiempo
+% ============================================================================
+\newpage
+\section*{Soluciones}
+
+\textbf{Ejercicio 1.}
+\begin{lstlisting}
+def suma_hasta(n):
+    if n == 0:        # caso base
+        return 0
+    return n + suma_hasta(n - 1)
+\end{lstlisting}
+
+\textbf{Ejercicio 2.}
+\begin{lstlisting}
+def potencia(base, exp):
+    if exp == 0:      # caso base: cualquier base^0 = 1
+        return 1
+    return base * potencia(base, exp - 1)
+\end{lstlisting}
+
+\textbf{Ejercicio 3.} La versión directa recalcula los mismos valores muchas
+veces: \texttt{F(n)} genera dos llamadas, cada una otras dos, etc., dando un
+crecimiento exponencial $O(2^n)$ de llamadas. Se resuelve con memoización o
+con una versión iterativa $O(n)$.
+
+% ============================================================================
+%  REFERENCIAS
+% ============================================================================
+\section*{Referencias}
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item <<Autor, Título, Editorial, Año / URL con fecha de consulta>>
+\end{itemize}
+
+\end{document}
