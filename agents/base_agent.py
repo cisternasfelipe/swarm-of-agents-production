@@ -42,9 +42,12 @@ class BaseAgent(ABC):
     role: str = ""
     prompt_file: str = ""
 
-    def __init__(self, project_path: str, read_only: bool = False):
+    def __init__(self, project_path: str, read_only: bool = False,
+                 run_id: str | None = None, event_store=None):
         self.project_path = project_path
         self.read_only = read_only
+        self._run_id = run_id
+        self._event_store = event_store
         self._kb = KnowledgeBase()
         self._embedder = Embedder()
         self._retriever = Retriever(self._kb, self._embedder)
@@ -134,6 +137,10 @@ class BaseAgent(ABC):
         self._rate_limiter.wait()
         start = time.time()
         self._logger.info("task_start", role=self.role, task=task[:100])
+
+        if self._event_store and self._run_id:
+            self._event_store.emit(self._run_id, "agent_started", agent=self.role)
+
         try:
             await self._ensure_agent()
             result_parts = []
@@ -163,6 +170,11 @@ class BaseAgent(ABC):
                     if result == "block":
                         confirm_results.append(ConfirmResult(confirmed=False, tool_call=tc))
                         self._metrics.record_guardrail_violation(self.role, "block")
+                        if self._event_store and self._run_id:
+                            self._event_store.emit(self._run_id, "guardrail_triggered",
+                                                   agent=self.role,
+                                                   payload={"tool": tc.name, "path": args_dict.get("path"),
+                                                            "result": "block", "message": message})
                         self._logger.warning(
                             "guardrail_blocked",
                             role=self.role,
@@ -172,6 +184,11 @@ class BaseAgent(ABC):
                     elif result == "warn":
                         confirm_results.append(ConfirmResult(confirmed=True, tool_call=tc))
                         self._metrics.record_guardrail_violation(self.role, "warn")
+                        if self._event_store and self._run_id:
+                            self._event_store.emit(self._run_id, "guardrail_triggered",
+                                                   agent=self.role,
+                                                   payload={"tool": tc.name, "path": args_dict.get("path"),
+                                                            "result": "warn", "message": message})
                         self._logger.info(
                             "guardrail_warned",
                             role=self.role,
@@ -180,6 +197,10 @@ class BaseAgent(ABC):
                         )
                     else:
                         confirm_results.append(ConfirmResult(confirmed=True, tool_call=tc))
+                        if self._event_store and self._run_id:
+                            self._event_store.emit(self._run_id, "tool_call_confirmed",
+                                                   agent=self.role,
+                                                   payload={"tool": tc.name, "path": args_dict.get("path")})
 
                 stream_input = UserConfirmResultEvent(
                     reply_id=confirm_event.reply_id,
@@ -191,10 +212,18 @@ class BaseAgent(ABC):
             self._metrics.record_agent_call(self.role, duration_ms=duration_ms)
             self._logger.info("task_done", role=self.role, duration_ms=duration_ms)
             self._store_knowledge(task, result)
+
+            if self._event_store and self._run_id:
+                self._event_store.emit(self._run_id, "agent_finished", agent=self.role,
+                                       summary=result[:500])
+
             return result
         except Exception as e:
             duration_ms = int((time.time() - start) * 1000)
             self._logger.error("task_failed", role=self.role, error=str(e), duration_ms=duration_ms)
+            if self._event_store and self._run_id:
+                self._event_store.emit(self._run_id, "agent_failed", agent=self.role,
+                                       summary=str(e)[:500])
             raise
         finally:
             await self._cleanup()
