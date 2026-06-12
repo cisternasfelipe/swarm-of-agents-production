@@ -145,8 +145,10 @@ class BaseAgent(ABC):
             await self._ensure_agent()
             result_parts = []
             stream_input = UserMsg("user", task)
-            
-            while True:
+            max_confirm_loops = 50
+
+            while max_confirm_loops > 0:
+                max_confirm_loops -= 1
                 confirm_event = None
                 async for event in self._agent.reply_stream(stream_input):
                     if isinstance(event, TextBlockDeltaEvent):
